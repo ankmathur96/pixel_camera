@@ -1,6 +1,6 @@
-SRC_DIR := src
-BUILD_DIR := build
-BIN_DIR := bin
+SRC_DIR := ../src
+BUILD_DIR := ../build
+BIN_DIR := ../bin
 SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
 OBJ_FILES := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRC_FILES))
 LDFLAGS :=

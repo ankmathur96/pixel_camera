@@ -18,10 +18,13 @@ class CameraPipeline : public CameraPipelineInterface {
   using CameraPipelineInterface::sensor_;
 
   std::unique_ptr<Image<RgbPixel>> ProcessShot() const override;
-
   // BEGIN: CS348K STUDENTS MODIFY THIS CODE
   //
   // You can add any necessary private member variables or functions.
   //
+  std::unique_ptr<Image<RgbPixel>> GaussianBlur(std::unique_ptr<Image<RgbPixel>> &originalImage) const;
+  std::unique_ptr<Image<RgbPixel>> DownSample(std::unique_ptr<Image<RgbPixel>> &originalImage) const;
+  std::unique_ptr<Image<RgbPixel>> UpSample(std::unique_ptr<Image<RgbPixel>> &originalImage) const;
+  void Denoise(std::unique_ptr<Image<RgbPixel>> &originalImage) const;
   // END: CS348K STUDENTS MODIFY THIS CODE  
 };
