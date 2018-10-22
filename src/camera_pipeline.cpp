@@ -2,47 +2,34 @@
 #include <iostream>
 #include <algorithm>
 #include <cstdlib>
+#include <stdlib.h>     /* malloc, calloc, realloc, free */
+#include <math.h>
 
-std::unique_ptr<Image<RgbPixel>> CameraPipeline::GaussianBlur(std::unique_ptr<Image<RgbPixel>> &originalImage) const {
-    int height = originalImage->height();
-    int width = originalImage->width();
-    std::cout << "Obtained the height and width" << std::endl;
-    std::unique_ptr<Image<RgbPixel>> blurredImage(new Image<RgbPixel>(width, height));
-    std::cout << "Initialize blur img" << std::endl;
-    // copy into float array
-    float** new_img_r = new float*[height + 2];
-    float** new_img_g = new float*[height + 2];
-    float** new_img_b = new float*[height + 2];
+// mutates inputs.
+float** CameraPipeline::GaussianChannelBlur(float** channel, int height, int width) const {
+    float** expandedChannel = (float**) malloc(sizeof(float*) * (height + 2));
     for (int i = 0; i < height + 2; i++) {
-        new_img_r[i] = new float[width+2];
-        new_img_g[i] = new float[width+2];
-        new_img_b[i] = new float[width+2];
+        expandedChannel[i] = (float*) malloc(sizeof(float) * (width+2));
     }
-    std::cout << "Initialized the arrays" << std::endl;
+    float** blurredChannel = (float**) malloc(sizeof(float*) * height);
+    for (int i = 0; i < height + 2; i++) {
+        blurredChannel[i] = (float*) malloc(sizeof(float) * width);
+    }
+    std::cout << "Allocated" << std::endl;
     for (int row = 0; row < height; row++) {
         for (int col = 0; col < width; col++) {
-            auto& pixel = (*originalImage)(row, col);
-            new_img_r[row + 1][col + 1] = pixel.r;
-            new_img_g[row + 1][col + 1] = pixel.g;
-            new_img_b[row + 1][col + 1] = pixel.b;
+            expandedChannel[row + 1][col + 1] = channel[row][col];
         }
     }
-    //    std::cout << "Performed copy." << std::endl;
+    std::cout << "Expanded allocation" << std::endl;
     // mirror the edges
     for (int z = 0; z < height + 2; z++) {
-        new_img_r[z][0] = new_img_r[z][1];
-        new_img_r[z][width+1] = new_img_r[z][width];
-        new_img_r[0][z] = new_img_r[1][z];
-        new_img_r[height+1][z] = new_img_r[width][z];
-        new_img_g[z][0] = new_img_g[z][1];
-        new_img_g[z][width+1] = new_img_g[z][width];
-        new_img_g[0][z] = new_img_g[1][z];
-        new_img_g[height+1][z] = new_img_g[height][z];
-        new_img_b[z][0] = new_img_b[z][1];
-        new_img_b[z][width+1] = new_img_b[z][width];
-        new_img_b[0][z] = new_img_b[1][z];
-        new_img_b[height+1][z] = new_img_b[height][z];
+        expandedChannel[z][0] = expandedChannel[z][1];
+        expandedChannel[z][width+1] = expandedChannel[z][width];
+        expandedChannel[0][z] = expandedChannel[1][z];
+        expandedChannel[height+1][z] = expandedChannel[height][z];
     }
+    std::cout << "Mirrored edges" << std::endl;
     float weights[] = {1.f/64, 3.f/64, 3.f/64, 1.f/64,
         3.f/64, 9.f/64, 9.f/64, 3.f/64,
         3.f/64, 9.f/64, 9.f/64, 3.f/64,
@@ -50,19 +37,52 @@ std::unique_ptr<Image<RgbPixel>> CameraPipeline::GaussianBlur(std::unique_ptr<Im
     };
     for (int j = 0; j < height; j++) {
         for (int i = 0; i < width; i++) {
-            float tmpr = 0.f;
-            float tmpg = 0.f;
-            float tmpb = 0.f;
+            float tmp = 0.f;
             for (int jj=0; jj < 3; jj++) {
                 for (int ii=0; ii<3; ii++) {
-                    tmpr += new_img_r[j + jj][i + ii] * weights[jj * 3 + ii];
-                    tmpg += new_img_g[j + jj][i + ii] * weights[jj * 3 + ii];
-                    tmpb += new_img_b[j + jj][i + ii] * weights[jj * 3 + ii];
+                    tmp += expandedChannel[j + jj][i + ii] * weights[jj * 3 + ii];
                 }
             }
-            (*blurredImage)(j, i).r = tmpr;
-            (*blurredImage)(j, i).g = tmpg;
-            (*blurredImage)(j, i).b = tmpb;
+            blurredChannel[j][i] = tmp;
+        }
+    }
+    for(int i = 0; i < height+2; ++i) {
+        free(expandedChannel[i]);
+    }
+    free(expandedChannel);
+    return blurredChannel;
+}
+
+std::unique_ptr<Image<RgbPixel>> CameraPipeline::GaussianBlur(Image<RgbPixel>* originalImage) const {
+    int height = originalImage->height();
+    int width = originalImage->width();
+    // copy into float array
+    float** new_img_r = new float*[height];
+    float** new_img_g = new float*[height];
+    float** new_img_b = new float*[height];
+    for (int i = 0; i < height; i++) {
+        new_img_r[i] = new float[width];
+        new_img_g[i] = new float[width];
+        new_img_b[i] = new float[width];
+    }
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            auto& pixel = (*originalImage)(row, col);
+            new_img_r[row][col] = pixel.r;
+            new_img_g[row][col] = pixel.g;
+            new_img_b[row][col] = pixel.b;
+        }
+    }
+    CameraPipeline::GaussianChannelBlur(new_img_r, height, width);
+    CameraPipeline::GaussianChannelBlur(new_img_g, height, width);
+    CameraPipeline::GaussianChannelBlur(new_img_b, height, width);
+    std::unique_ptr<Image<RgbPixel>> blurredImage(new Image<RgbPixel>(width, height));
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            auto& pixel = (*blurredImage)(row, col);
+            pixel.r = new_img_r[row][col];
+            pixel.g = new_img_g[row][col];
+            pixel.b = new_img_b[row][col];
         }
     }
     for(int i = 0; i < height+2; ++i) {
@@ -77,7 +97,7 @@ std::unique_ptr<Image<RgbPixel>> CameraPipeline::GaussianBlur(std::unique_ptr<Im
 }
 
 std::unique_ptr<Image<RgbPixel>> CameraPipeline::DownSample(std::unique_ptr<Image<RgbPixel>> &originalImage) const {
-    std::unique_ptr<Image<RgbPixel>> blurredImage = CameraPipeline::GaussianBlur(originalImage);
+    std::unique_ptr<Image<RgbPixel>> blurredImage = CameraPipeline::GaussianBlur(originalImage.get());
     std::unique_ptr<Image<RgbPixel>> downImg(new Image<RgbPixel>(originalImage->width()/2, originalImage->height()/2));
     int newRowIdx = 0;
     int newColIdx = 0;
@@ -97,6 +117,41 @@ std::unique_ptr<Image<RgbPixel>> CameraPipeline::DownSample(std::unique_ptr<Imag
         }
     }
     return downImg;
+}
+
+float** CameraPipeline::UpSampleChannel(float** originalImage, int height, int width) const {
+    std::cout << "Sizes:" << std::endl;
+    std::cout << height << std::endl;
+    std::cout << width << std::endl;
+    float** upImg = (float**) malloc(sizeof(float*) * 2 * height);
+    for (int z = 0; z < height*2; z++) {
+        upImg[z] = (float*) malloc(sizeof(float) * 2 * width);
+    }
+    std::cout << "upsamplealloc" << std::endl;
+    for (int j = 0; j < 2*height; j++) {
+        for (int i = 0; i < 2*width; i++) {
+            int row = j/2;
+            int col = i/2;
+            if (row == height-1) {
+                std::cout << "Issued correction" << std::endl;
+                row = height - 2;
+            }
+            if (col == width-1) {
+                std::cout << "Issued correction" << std::endl;
+                col = width - 2;
+            }
+            float w1 = (i%2) ? .75f : .25f;
+            float w2 = (j%2) ? .75f : .25f;
+//            std::cout << "Results:" << std::endl;
+//            std::cout << upImg[j][i] << std::endl;
+//            std::cout << originalImage[row][col] << std::endl;
+//            std::cout << originalImage[row][col+1] << std::endl;
+//            std::cout << originalImage[row+1][col] << std::endl;
+//            std::cout << originalImage[row+1][col+1] << std::endl;
+            upImg[j][i] = w1 * w2 * originalImage[row][col] + (1.0-w1) * w2 * originalImage[row][col+1] + w1 * (1 - w2) * originalImage[row+1][col] + (1.0-w1) * (1.0-w2) * originalImage[row+1][col+1];
+        }
+    }
+    return upImg;
 }
 
 std::unique_ptr<Image<RgbPixel>> CameraPipeline::UpSample(std::unique_ptr<Image<RgbPixel>> &originalImage) const {
@@ -149,6 +204,204 @@ void CameraPipeline::Denoise(std::unique_ptr<Image<RgbPixel>> &originalImage) co
             pixel.b = bilateral_val_b / norm_b;
         }
     }
+}
+
+std::unique_ptr<Image<RgbPixel>> CameraPipeline::subImage(Image<RgbPixel>* im1, Image<RgbPixel>* im2) const {
+    int height = im1->height();
+    int width = im1->width();
+    std::unique_ptr<Image<RgbPixel>> subImg(new Image<RgbPixel>(width, height));
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            auto& pixel1 = (*im1)(row, col);
+            auto& pixel2 = (*im2)(row, col);
+            (*subImg)(row, col) = pixel1 - pixel2;
+        }
+    }
+    return subImg;
+}
+
+float** CameraPipeline::subImageChannel(float** im1, float** im2, int height, int width) const {
+    float** subImg = (float**) malloc(sizeof(float*) * height);
+    for (int i = 0; i < height; i++) {
+        subImg[i] = (float*) malloc(sizeof(float) * width);
+    }
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            float pixel1 = im1[row][col];
+            float pixel2 = im2[row][col];
+            subImg[row][col] = pixel1 - pixel2;
+        }
+    }
+    return subImg;
+}
+
+
+std::unique_ptr<Image<RgbPixel>> CameraPipeline::exposureFusion(std::unique_ptr<Image<RgbPixel>> &originalImage, int levels) const {
+    int height = originalImage->height();
+    int width = originalImage->width();
+    // convert to YUV space
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            auto& pixel = (*originalImage)(i, j);
+            Float3Pixel newPixel = Float3Pixel::RgbToYuv(pixel);
+            pixel.y = newPixel.y;
+            pixel.u = newPixel.u;
+            pixel.v = newPixel.v;
+        }
+    }
+    std::cout << "Convert to YUV" << std::endl;
+    // generate virtual exposure
+    std::unique_ptr<Image<RgbPixel>> exposedImage(new Image<RgbPixel>(width, height));
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            auto& pixel = (*originalImage)(i, j);
+            auto& exposedPixel = (*exposedImage)(i, j);
+            exposedPixel = pixel * 1.2;
+        }
+    }
+    std::cout << "Virtually exposed" << std::endl;
+    // make a gaussian pyramid
+    float** darkIm = (float**) malloc(sizeof(float*) * height);
+    float** brightIm = (float**) malloc(sizeof(float*) * height);
+    for (int i = 0; i < height; i++) {
+        darkIm[i] = (float*) malloc(sizeof(float) * width);
+        brightIm[i] = (float*) malloc(sizeof(float) * width);
+    }
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            darkIm[row][col] = (*originalImage)(row, col).y;
+            brightIm[row][col] = (*exposedImage)(row, col).y;
+        }
+    }
+    std::cout << "Generated image copies." << std::endl;
+    // generate the blending mask for the dark image.
+    float** blend_mask_dark = (float**) malloc(sizeof(float*) * height);
+    float** blend_mask_bright = (float**) malloc(sizeof(float*) * height);
+    for (int i = 0; i < height; i++) {
+        blend_mask_dark[i] = (float*) malloc(sizeof(float) * width);
+        blend_mask_bright[i] = (float*) malloc(sizeof(float) * width);
+    }
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            float pixel = darkIm[row][col];
+            float brightPixel = brightIm[row][col];
+            float weight = exp(-pow(pixel - 0.5, 2)/ 0.08);
+            float brightWeight = exp(-pow(brightPixel - 0.5, 2)/ 0.08);
+            blend_mask_dark[row][col] = weight;
+            blend_mask_bright[row][col] = brightWeight;
+        }
+    }
+    std::cout << "Finished masking" << std::endl;
+    float** gaussianPyramidLevelsDark[levels];
+    float** gaussianPyramidLevelsBright[levels];
+    float** currentDark = darkIm;
+    float** currentBright = brightIm;
+    for (int i = 0; i < levels; i++) {
+        std::cout << "Preblur" << std::endl;
+        float** blurredDark = CameraPipeline::GaussianChannelBlur(currentDark, height, width);
+        float** blurredBright = CameraPipeline::GaussianChannelBlur(currentBright, height, width);
+        std::cout << "blurred" << std::endl;
+        float** downSampledDark = (float**) malloc(sizeof(float*) * (height/2));
+        float** downSampledBright = (float**) malloc(sizeof(float*) * (height/2));
+        for (int z = 0; z < height/2; z++) {
+            downSampledDark[z] = (float*) malloc(sizeof(float) * (width/2));
+            downSampledBright[z] = (float*) malloc(sizeof(float) * (width/2));
+        }
+        std::cout << "downsample alloc" << std::endl;
+        int rowIdx = 0;
+        int colIdx = 0;
+        for (int row = 0; row < height; row++) {
+            if (row % 2 == 0) {
+                for (int col = 0; col < width; col++) {
+                    if (col % 2 == 0) {
+                        downSampledDark[rowIdx][colIdx] = blurredDark[row][col];
+                        downSampledBright[rowIdx][colIdx] = blurredBright[row][col];
+                        colIdx++;
+                    }
+                }
+                rowIdx++;
+            }
+        }
+        std::cout << "pre-free" << std::endl;
+        std::cout << "downsampled" << std::endl;
+        float** nextLevelDark = CameraPipeline::UpSampleChannel(downSampledDark, height/2, width/2);
+        std::cout << "after dark" << std::endl;
+        float** nextLevelBright = CameraPipeline::UpSampleChannel(downSampledBright, height/2, width/2);
+        std::cout << "upsampled" << std::endl;
+        for (int z = 0; z < height/2; z++) {
+            free(downSampledDark[z]);
+            free(downSampledBright[z]);
+        }
+        free(downSampledDark);
+        free(downSampledBright);
+        for (int z = 0; z < height; z++) {
+            free(blurredDark[z]);
+            free(blurredBright[z]);
+        }
+        free(blurredDark);
+        free(blurredBright);
+        std::cout << i << std::endl;
+        gaussianPyramidLevelsDark[i] = nextLevelDark;
+        gaussianPyramidLevelsBright[i] = nextLevelDark;
+        currentDark = nextLevelDark;
+        currentBright = nextLevelBright;
+        std::cout << "going to next iteration" << std::endl;
+    }
+    std::cout << "Finished Gaussian pyramid" << std::endl;
+    // make a laplacian pyramid
+    float** laplacianPyramidLevelsDark[levels];
+    float** laplacianPyramidLevelsBright[levels];
+    currentDark = darkIm;
+    currentBright = brightIm;
+    std::cout << "Starting Laplacian pyramid" << std::endl;
+    for (int j = 0; j < levels; j++) {
+        std::cout << "Before Sub" << std::endl;
+        float** nextDark = CameraPipeline::subImageChannel(currentDark, gaussianPyramidLevelsDark[j], height, width);
+        float** nextBright = CameraPipeline::subImageChannel(currentBright, gaussianPyramidLevelsBright[j], height, width);
+        std::cout << "After Sub" << std::endl;
+        laplacianPyramidLevelsDark[j] = nextDark;
+        laplacianPyramidLevelsBright[j] = nextBright;
+        currentBright = nextBright;
+        currentDark = nextDark;
+    }
+    // for debugging, what does our mask even look like?
+    std::unique_ptr<Image<YuvPixel>> mask(new Image<YuvPixel>(width, height));
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            auto& pixel = (*mask)(row, col);
+            pixel.y = blend_mask_dark[row][col];
+        }
+    }
+    // cleanup
+    for (int i = 0; i < levels; i++) {
+        float** curImgDark = gaussianPyramidLevelsDark[i];
+        float** curImgBright = gaussianPyramidLevelsBright[i];
+        float** curImgLplBright = laplacianPyramidLevelsBright[i];
+        float** curImgLplDark = laplacianPyramidLevelsDark[i];
+        for (int j = 0; j < height; j++) {
+            free(curImgDark[j]);
+            free(curImgBright[j]);
+            free(curImgLplBright[j]);
+            free(curImgLplDark[j]);
+        }
+        free(curImgDark);
+        free(curImgBright);
+        free(curImgLplBright);
+        free(curImgLplDark);
+    }
+    for (int i = 0; i < height; i++) {
+        free(blend_mask_dark[i]);
+        free(blend_mask_bright[i]);
+        free(darkIm[i]);
+        free(brightIm[i]);
+    }
+    free(blend_mask_dark);
+    free(blend_mask_bright);
+    free(darkIm);
+    free(brightIm);
+    exposedImage.reset();
+    return mask;
+    // perform the blending.
 }
 
 std::unique_ptr<Image<RgbPixel>> CameraPipeline::ProcessShot() const {
@@ -391,50 +644,53 @@ std::unique_ptr<Image<RgbPixel>> CameraPipeline::ProcessShot() const {
             }
         }
     }
-    // convert to YUV space
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            auto& pixel = (*image)(i, j);
-            Float3Pixel newPixel = Float3Pixel::RgbToYuv(pixel);
-            pixel.y = newPixel.y;
-            pixel.u = newPixel.u;
-            pixel.v = newPixel.v;
-        }
-    }
-    // low-pass filter on image
-    std::unique_ptr<Image<RgbPixel>> blurredImage = CameraPipeline::GaussianBlur(image);
-    // take the Cb and Cr blurred levels and put those in.
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            auto& blurPixel = (*blurredImage)(i, j);
-            auto& pixel = (*image)(i, j);
-            pixel.y = pixel.y;
-            pixel.u = blurPixel.u;
-            pixel.v = blurPixel.v;
-        }
-    }
-    // convert the image back to RGB space.
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            auto& pixel = (*image)(i, j);
-            Float3Pixel newPixel = Float3Pixel::YuvToRgb(pixel);
-            pixel.r = newPixel.r;
-            pixel.g = newPixel.g;
-            pixel.b = newPixel.b;
-        }
-    }
+//    // convert to YUV space
+//    for (int i = 0; i < height; i++) {
+//        for (int j = 0; j < width; j++) {
+//            auto& pixel = (*image)(i, j);
+//            Float3Pixel newPixel = Float3Pixel::RgbToYuv(pixel);
+//            pixel.y = newPixel.y;
+//            pixel.u = newPixel.u;
+//            pixel.v = newPixel.v;
+//        }
+//    }
+//    // low-pass filter on image
+//    std::unique_ptr<Image<RgbPixel>> blurredImage = CameraPipeline::GaussianBlur(image.get());
+//    // take the Cb and Cr blurred levels and put those in.
+//    for (int i = 0; i < height; i++) {
+//        for (int j = 0; j < width; j++) {
+//            auto& blurPixel = (*blurredImage)(i, j);
+//            auto& pixel = (*image)(i, j);
+//            pixel.y = pixel.y;
+//            pixel.u = blurPixel.u;
+//            pixel.v = blurPixel.v;
+//        }
+//    }
+//    // convert the image back to RGB space.
+//    for (int i = 0; i < height; i++) {
+//        for (int j = 0; j < width; j++) {
+//            auto& pixel = (*image)(i, j);
+//            Float3Pixel newPixel = Float3Pixel::YuvToRgb(pixel);
+//            pixel.r = newPixel.r;
+//            pixel.g = newPixel.g;
+//            pixel.b = newPixel.b;
+//        }
+//    }
     CameraPipeline::Denoise(image);
-    // apply some gain because brighter images tend to look nicer.
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            auto& pixel = (*image)(i, j);
-            pixel.r = std::min(pixel.r + 0.15 * pixel.r, 1.0);
-            pixel.g = std::min(pixel.g + 0.15 * pixel.g, 1.0);
-            pixel.b = std::min(pixel.b + 0.15 * pixel.b, 1.0);
-        }
-    }
+//    // apply some gain because brighter images tend to look nicer.
+//    for (int i = 0; i < height; i++) {
+//        for (int j = 0; j < width; j++) {
+//            auto& pixel = (*image)(i, j);
+//            pixel.r = std::min(pixel.r + 0.15 * pixel.r, 1.0);
+//            pixel.g = std::min(pixel.g + 0.15 * pixel.g, 1.0);
+//            pixel.b = std::min(pixel.b + 0.15 * pixel.b, 1.0);
+//        }
+//    }
+    
     // gamma correct to use more bit space.
     image->GammaCorrect(0.41);
+    std::cout << "Calling exposure fusion" << std::endl;
+    image = CameraPipeline::exposureFusion(image, 4);
     // map to 255 for 8-bit output.
     for (int row = 0; row < height; row++) {
         for (int col = 0; col < width; col++) {

@@ -24,7 +24,6 @@
 		FDCCB72D2163EE1B0042B097 = {
 			isa = PBXGroup;
 			children = (
-				FDCCB73D2163EE470042B097 /* camera_main.cpp */,
 				FDCCB7382163EE470042B097 /* camera_pipeline_interface.hpp */,
 				FDCCB7392163EE470042B097 /* camera_pipeline.cpp */,
 				FDCCB73F2163EE470042B097 /* camera_pipeline.hpp */,
@@ -34,6 +33,7 @@
 				FDCCB73C2163EE470042B097 /* common.hpp */,
 				FDCCB7412163EE470042B097 /* image.cpp */,
 				FDCCB7422163EE470042B097 /* image.hpp */,
+				FDCCB73D2163EE470042B097 /* camera_main.cpp */,
 				FDCCB73E2163EE470042B097 /* pixel.hpp */,
 			);
 			sourceTree = "<group>";
